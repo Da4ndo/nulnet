@@ -1,9 +1,9 @@
 # **NULNET** — **N**ode **U**tility & **L**ifecycle **N**etwork **E**nvironment **T**ool
 
-[![CI](https://img.shields.io/github/actions/workflow/status/nulnet/nulnet/ci.yml?branch=main&label=CI)](https://github.com/Da4ndo/nulnet/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/nulnet/nulnet/release-nulnet.yml?label=Release)](https://github.com/Da4ndo/nulnet/actions/workflows/release-nulnet.yml)
-[![Latest Release](https://img.shields.io/github/v/release/nulnet/nulnet)](https://github.com/Da4ndo/nulnet/releases/latest)
-[![License](https://img.shields.io/github/license/nulnet/nulnet)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/Da4ndo/nulnet/ci.yml?branch=main&label=CI)](https://github.com/Da4ndo/nulnet/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/Da4ndo/nulnet/release-nulnet.yml?label=Release)](https://github.com/Da4ndo/nulnet/actions/workflows/release-nulnet.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Da4ndo/nulnet)](https://github.com/Da4ndo/nulnet/releases/latest)
+[![License](https://img.shields.io/github/license/Da4ndo/nulnet)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.98+-orange.svg?logo=rust)](https://www.rust-lang.org)
 
 Lightweight Linux host agent. Collects periodic telemetry, exposes an authenticated JSON-RPC API over a Unix socket, and self-updates from GitHub Releases or a custom CDN. No web UI, no database.

@@ -35,7 +35,7 @@ Options:
 
 Environment:
   NULNET_INSTALL_ASSUME_YES=1   Same as -y
-  NULNET_CDN_BASE=<url>         Use custom CDN; default is GitHub Releases (nulnet/nulnet)
+  NULNET_CDN_BASE=<url>         Use custom CDN; default is GitHub Releases (Da4ndo/nulnet)
   NULNET_INSTALL_SUDOERS=1|0    Install sudoers for self-update restart (skip prompt)
   NO_COLOR=1                    Disable ANSI colors
 HELP
@@ -54,7 +54,7 @@ elif [[ "${NULNET_INSTALL_SUDOERS:-}" == 0 ]]; then
 	INSTALL_SUDOERS=0
 fi
 
-GITHUB_REPO="nulnet/nulnet"
+GITHUB_REPO="Da4ndo/nulnet"
 CDN_BASE="${NULNET_CDN_BASE:-}"
 NULNET_ROOT="/opt/nulnet"
 NULNET_BIN="${NULNET_ROOT}/bin/nulnet"
