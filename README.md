@@ -11,7 +11,7 @@ Lightweight Linux host agent. Collects periodic telemetry, exposes an authentica
 Built with Rust + Tokio.
 
 > [!NOTE]  
-> This repository ships the **agent** only. Clients connect over the Unix socket — use the companion CLI `[nulctl](https://github.com/nulnet/nulctl)` to authenticate and query telemetry.
+> This repository ships the **agent** only. Clients connect over the Unix socket — use the companion CLI [nulctl](https://github.com/nulnet/nulctl) to authenticate and query telemetry.
 
 ---
 
@@ -54,13 +54,13 @@ cargo build --release
 > [!NOTE]
 > Debug builds load `./config.development.toml`; release builds expect `/opt/nulnet/config.toml`.
 
-Release tags (`v*`) are built by `[.github/workflows/release-nulnet.yml](.github/workflows/release-nulnet.yml)` and published to GitHub Releases.
+Release tags (`v*`) are built by [.github/workflows/release-nulnet.yml](.github/workflows/release-nulnet.yml) and published to GitHub Releases.
 
 ---
 
 ## Configuration
 
-Config path: `/opt/nulnet/config.toml` (release) or `./config.development.toml` (debug). See `[config.example.toml](config.example.toml)`.
+Config path: `/opt/nulnet/config.toml` (release) or `./config.development.toml` (debug). See [config.example.toml](config.example.toml).
 
 ```toml
 [agent]
