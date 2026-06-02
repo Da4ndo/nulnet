@@ -36,7 +36,8 @@ NULNET_CDN_BASE='https://cdn.example.com/nulnet' \
 ```
 
 > [!IMPORTANT]
-> **Requires:** `curl`, `sha256sum`, `useradd`, `install`, `systemctl`.
+> **Requires:** `curl`, `sha256sum`, `useradd` or `adduser`, `install`, `systemctl`.
+> Release binaries are statically linked (musl) and run on common glibc-based Linux distros (Debian 11+, Ubuntu 20.04+, etc.) without a minimum glibc version.
 
 ---
 

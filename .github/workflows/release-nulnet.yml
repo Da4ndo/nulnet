@@ -14,14 +14,20 @@ env:
 
 jobs:
   build-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.release.tag_name }}
 
+      - name: Install musl toolchain
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
       - name: Install Rust stable
         run: rustup update stable --no-self-update && rustup default stable
+
+      - name: Add musl target
+        run: rustup target add x86_64-unknown-linux-musl
 
       - name: Cache Cargo registry and build artifacts
         uses: actions/cache@v4
@@ -31,15 +37,15 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
+          key: ${{ runner.os }}-musl-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-musl-cargo-
 
       - name: Build nulnet
-        run: cargo build --release --locked
+        run: cargo build --release --locked --target x86_64-unknown-linux-musl
 
       - name: Prepare release artifacts
         run: |
-          BIN=target/release/nulnet
+          BIN=target/x86_64-unknown-linux-musl/release/nulnet
           strip "$BIN"
           sha256sum "$BIN" | awk '{print $1}' > nulnet.sha256
           cp "$BIN" nulnet

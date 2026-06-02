@@ -1,0 +1,90 @@
+name: Installation / deployment
+description: install.sh, systemd, binary compatibility, or service startup failures
+title: "[Install]: "
+labels:
+  - installation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report problems installing or running the nulnet systemd service.
+        Include command output and logs — they save a lot of back-and-forth.
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Install method
+      options:
+        - curl install.sh from GitHub Releases
+        - install.sh with NULNET_CDN_BASE
+        - Manual (copied binary + unit)
+        - Built from source on the host
+        - Upgrade / self-update
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Host environment
+      description: Distro, version, architecture, and how you invoke the installer
+      placeholder: |
+        e.g. Debian 12 (bookworm), x86_64
+        curl -fsSL …/install.sh | bash
+    validations:
+      required: true
+
+  - type: textarea
+    id: error_output
+    attributes:
+      label: Error output
+      description: Full terminal output from install.sh or the failing command
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: service_state
+    attributes:
+      label: Service state after install
+      options:
+        - install.sh failed before systemd step
+        - Service fails to start (crash loop)
+        - Service starts but API/socket unreachable
+        - Binary runs manually but not under systemd
+        - Not applicable / install did not complete
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Service logs
+      description: Output of `sudo journalctl -u nulnet -n 50 --no-pager` if the unit exists
+      render: shell
+      placeholder: |
+        sudo journalctl -u nulnet -n 50 --no-pager
+    validations:
+      required: false
+
+  - type: textarea
+    id: binary_info
+    attributes:
+      label: Binary info (optional)
+      description: Output of `file /opt/nulnet/bin/nulnet` and `ldd /opt/nulnet/bin/nulnet` if the binary exists
+      render: shell
+      placeholder: |
+        file /opt/nulnet/bin/nulnet
+        ldd /opt/nulnet/bin/nulnet 2>&1 || true
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I included the full install error output (not just the last line)
+          required: true
+        - label: I searched existing issues for duplicates
+          required: true

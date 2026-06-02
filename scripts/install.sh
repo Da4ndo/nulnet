@@ -7,11 +7,14 @@
 #   bash install.sh -y           # skip all confirmations (CI / automation)
 #   bash install.sh --dry-run    # full checks + sudo auth; skip mutating commands
 #
-# Requires: curl, sha256sum or shasum, mktemp; privileged phase needs useradd,
-# install, systemctl (Debian/Ubuntu style; Linux target for install).
+# Requires: curl, sha256sum or shasum, mktemp; privileged phase needs useradd
+# or adduser, install, systemctl (Debian/Ubuntu style; Linux target for install).
 # visudo is optional — used to validate sudoers when present.
 
 set -euo pipefail
+
+# Debian non-login shells often omit /usr/sbin (useradd, visudo, …).
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
 
 ASSUME_YES=false
 DRY_RUN=false
@@ -94,6 +97,23 @@ banner() {
 }
 
 is_root() { [[ "$(id -u)" -eq 0 ]]; }
+
+has_useradd() { command -v useradd &>/dev/null; }
+has_adduser() { command -v adduser &>/dev/null; }
+
+can_create_users() {
+	has_useradd || has_adduser
+}
+
+create_system_user_desc() {
+	if has_useradd; then
+		printf 'useradd --system --no-create-home --home-dir %s --shell /usr/sbin/nologin nulnet' \
+			"$NULNET_ROOT"
+	elif has_adduser; then
+		printf 'adduser --system --no-create-home --home %s --shell /usr/sbin/nologin --disabled-password --gecos "" nulnet' \
+			"$NULNET_ROOT"
+	fi
+}
 
 answer_lower() {
 	printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
@@ -263,7 +283,10 @@ check_commands() {
 	fi
 	command -v mktemp &>/dev/null || missing+=("mktemp")
 	if [[ "$DRY_RUN" != true ]]; then
-		for cmd in useradd install systemctl; do
+		if ! can_create_users; then
+			missing+=("useradd or adduser")
+		fi
+		for cmd in install systemctl; do
 			command -v "$cmd" &>/dev/null || missing+=("$cmd")
 		done
 		if ! command -v visudo &>/dev/null; then
@@ -272,7 +295,7 @@ check_commands() {
 	fi
 	if [[ "${#missing[@]}" -gt 0 ]]; then
 		err "Required command(s) not found: ${missing[*]}"
-		info "Install them (e.g. apt install curl coreutils) and re-run."
+		info "Install them (e.g. apt install curl coreutils passwd sudo) and re-run."
 		exit 1
 	fi
 	ok "Required tools present"
@@ -479,11 +502,17 @@ privileged_install() {
 	else
 		if [[ "$DRY_RUN" == true ]]; then
 			info "System user nulnet does not exist yet"
-			skip "useradd --system --no-create-home --home-dir ${NULNET_ROOT} --shell /usr/sbin/nologin nulnet"
+			skip "$(create_system_user_desc)"
 		else
-			mutate "Creating system user nulnet" \
-				useradd --system --no-create-home --home-dir "$NULNET_ROOT" \
-				--shell /usr/sbin/nologin nulnet
+			if has_useradd; then
+				mutate "Creating system user nulnet" \
+					useradd --system --no-create-home --home-dir "$NULNET_ROOT" \
+					--shell /usr/sbin/nologin nulnet
+			else
+				mutate "Creating system user nulnet" \
+					adduser --system --no-create-home --home "$NULNET_ROOT" \
+					--shell /usr/sbin/nologin --disabled-password --gecos "" nulnet
+			fi
 			ok "Created system user nulnet"
 		fi
 	fi
@@ -494,13 +523,22 @@ privileged_install() {
 			if as_root id -nG nulnet 2>/dev/null | tr ' ' '\n' | grep -qx docker; then
 				ok "User nulnet is already in group docker"
 			else
-				mutate "Adding nulnet to group docker" usermod -aG docker nulnet
+				if command -v usermod &>/dev/null; then
+					mutate "Adding nulnet to group docker" \
+						usermod -aG docker nulnet
+				elif has_adduser; then
+					mutate "Adding nulnet to group docker" \
+						adduser nulnet docker
+				else
+					mutate "Adding nulnet to group docker" \
+						gpasswd -a nulnet docker
+				fi
 				if [[ "$DRY_RUN" != true ]]; then
 					ok "Added nulnet to group docker"
 				fi
 			fi
 		else
-			info "User nulnet not created yet — would add to docker after useradd"
+			info "User nulnet not created yet — would add to docker after user creation"
 		fi
 	else
 		info "Docker group not present — skipping docker membership"
@@ -550,8 +588,16 @@ privileged_install() {
 			if id -nG "$INVOKER" 2>/dev/null | tr ' ' '\n' | grep -qx nulnet; then
 				ok "User '${INVOKER}' is already in group nulnet"
 			else
-				mutate "Adding '${INVOKER}' to group nulnet" \
-					usermod -aG nulnet "$INVOKER"
+				if command -v usermod &>/dev/null; then
+					mutate "Adding '${INVOKER}' to group nulnet" \
+						usermod -aG nulnet "$INVOKER"
+				elif has_adduser; then
+					mutate "Adding '${INVOKER}' to group nulnet" \
+						adduser "$INVOKER" nulnet
+				else
+					mutate "Adding '${INVOKER}' to group nulnet" \
+						gpasswd -a "$INVOKER" nulnet
+				fi
 				if [[ "$DRY_RUN" != true ]]; then
 					ok "Added '${INVOKER}' to group nulnet"
 				fi
