@@ -259,6 +259,7 @@ ${C_DIM}Telemetry host agent: Unix-socket API, Ed25519 auth, self-update from Gi
   ${C_BOLD}URL:${C_RESET}    $(download_base)
 
 ${C_BOLD}What this installer will do${C_RESET}
+  ${C_CYAN}0)${C_RESET} Install required system packages ${C_DIM}(curl, socat — root/sudo)${C_RESET}
   ${C_CYAN}1)${C_RESET} Download and verify the agent binary and systemd unit ${C_DIM}(no root)${C_RESET}
   ${C_CYAN}2)${C_RESET} Optionally configure sudoers for passwordless restart after self-update
   ${C_CYAN}3)${C_RESET} Install under ${NULNET_ROOT}, enable and start systemd ${C_DIM}(root/sudo)${C_RESET}
@@ -273,6 +274,73 @@ EOF
 	if [[ "$DRY_RUN" == true ]]; then
 		printf '\n%b\n' "${C_MAGENTA}${C_BOLD}Dry-run:${C_RESET} ${C_MAGENTA}runs downloads, checks, and sudo authentication; skips commands that modify the system.${C_RESET}"
 	fi
+}
+
+detect_pkg_manager() {
+	if command -v apt-get &>/dev/null; then
+		printf 'apt'
+	elif command -v pacman &>/dev/null; then
+		printf 'pacman'
+	else
+		printf ''
+	fi
+}
+
+pkg_installed() {
+	local pkg="$1"
+	local mgr
+	mgr="$(detect_pkg_manager)"
+	case "$mgr" in
+		apt)    dpkg -l "$pkg" 2>/dev/null | grep -q "^ii" ;;
+		pacman) pacman -Q "$pkg" &>/dev/null ;;
+		*)      return 1 ;;
+	esac
+}
+
+phase_packages() {
+	hdr "Phase 0 — system packages"
+
+	local mgr
+	mgr="$(detect_pkg_manager)"
+	if [[ -z "$mgr" ]]; then
+		warn "No supported package manager (apt/pacman) — skipping auto-install"
+		warn "Ensure curl, socat, and sha256sum are installed manually."
+		return 0
+	fi
+
+	local needed=("curl" "socat")
+	if ! command -v sha256sum &>/dev/null && ! command -v shasum &>/dev/null; then
+		needed+=("coreutils")
+	fi
+
+	local to_install=()
+	for pkg in "${needed[@]}"; do
+		if ! pkg_installed "$pkg" && ! command -v "$pkg" &>/dev/null; then
+			to_install+=("$pkg")
+		fi
+	done
+
+	if [[ "${#to_install[@]}" -eq 0 ]]; then
+		ok "Required packages already installed (curl, socat, sha256sum)"
+		return 0
+	fi
+
+	info "Installing missing packages: ${to_install[*]}"
+	if [[ "$DRY_RUN" == true ]]; then
+		skip "package install: ${to_install[*]}"
+		return 0
+	fi
+
+	case "$mgr" in
+		apt)
+			as_root apt-get update -qq
+			as_root DEBIAN_FRONTEND=noninteractive apt-get install -y "${to_install[@]}"
+			;;
+		pacman)
+			as_root pacman -Sy --noconfirm "${to_install[@]}"
+			;;
+	esac
+	ok "Packages installed: ${to_install[*]}"
 }
 
 check_commands() {
@@ -295,7 +363,7 @@ check_commands() {
 	fi
 	if [[ "${#missing[@]}" -gt 0 ]]; then
 		err "Required command(s) not found: ${missing[*]}"
-		info "Install them (e.g. apt install curl coreutils passwd sudo) and re-run."
+		info "Install them (e.g. apt-get install curl socat coreutils passwd sudo) and re-run."
 		exit 1
 	fi
 	ok "Required tools present"
@@ -495,6 +563,7 @@ privileged_install() {
 	fi
 
 	ensure_sudo_access
+	phase_packages
 
 	# --- system user ---
 	if as_root id -u nulnet &>/dev/null; then
