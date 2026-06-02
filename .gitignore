@@ -1,0 +1,12 @@
+/target
+/cli
+/data
+/.cargo
+/scripts/build.mac.sh
+
+*.sock
+config.development.toml
+build.md
+
+lcov.info
+.cargo-crap.toml

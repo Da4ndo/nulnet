@@ -1,0 +1,17 @@
+[package]
+name = "nulnet"
+version = "1.3.2"
+edition = "2024"
+
+[dependencies]
+ed25519-dalek = "2.2.0"
+getrandom = "0.4.2"
+hex = "0.4.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+sha2 = "0.11.0"
+sysinfo = "0.39.1"
+tokio = { version = "1.52.3", features = ["rt", "rt-multi-thread", "macros", "fs", "time", "net", "io-util", "process", "sync", "signal"] }
+toml = "1.1.2"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

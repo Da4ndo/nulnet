@@ -1,0 +1,17 @@
+[Unit]
+Description=NULNET Agent
+After=network.target
+
+[Service]
+Type=simple
+User=nulnet
+Group=nulnet
+ExecStart=/opt/nulnet/bin/nulnet
+Restart=on-failure
+RestartSec=10
+WorkingDirectory=/opt/nulnet
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

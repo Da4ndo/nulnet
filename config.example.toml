@@ -1,0 +1,17 @@
+# Example configuration for local development (debug builds load this path by default).
+# Copy to config.toml or adjust paths for your machine.
+
+[agent]
+data_dir = "/opt/nulnet/data"
+retention_days = 5
+socket_path = "/opt/nulnet/nulnet.sock"
+# Hex-encoded Ed25519 public keys (32 bytes) allowed to authenticate via nulctl.
+# Run `nulctl` once; it prints a new public key to add here, then restart the agent.
+allowed_keys = [""]
+
+[telemetry]
+interval_seconds = 30
+
+# Optional: custom CDN for self-update. Omit to use GitHub Releases (nulnet/nulnet).
+# [update]
+# cdn = "https://cdn.example.com/nulnet"
