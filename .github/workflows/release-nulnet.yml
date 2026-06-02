@@ -1,9 +1,9 @@
 name: Release nulnet
 
+# Runs when you publish a release in GitHub (UI or API). Does not create the release.
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Install Rust stable
         run: rustup update stable --no-self-update && rustup default stable
@@ -44,13 +46,12 @@ jobs:
           cp systemd/nulnet.service nulnet.service
           cp scripts/install.sh install.sh
 
-      - name: Publish GitHub Release
+      - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            --title "nulnet ${{ github.ref_name }}" \
-            --generate-notes \
+          gh release upload "${{ github.event.release.tag_name }}" \
+            --clobber \
             nulnet \
             nulnet.sha256 \
             nulnet.service \
