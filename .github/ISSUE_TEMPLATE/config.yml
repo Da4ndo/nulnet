@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: nulctl CLI issues
-    url: https://github.com/nulnet/nulctl/issues/new/choose
+    url: https://github.com/Da4ndo/nulctl/issues/new/choose
     about: Bugs or feature requests for the companion CLI client (not the agent)
   - name: Security vulnerability
-    url: https://github.com/nulnet/nulnet/security/advisories/new
+    url: https://github.com/Da4ndo/nulnet/security/advisories/new
     about: Report a security issue privately via GitHub Security Advisories

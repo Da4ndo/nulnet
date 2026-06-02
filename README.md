@@ -1,8 +1,8 @@
 # **NULNET** — **N**ode **U**tility & **L**ifecycle **N**etwork **E**nvironment **T**ool
 
-[![CI](https://img.shields.io/github/actions/workflow/status/nulnet/nulnet/ci.yml?branch=main&label=CI)](https://github.com/nulnet/nulnet/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/nulnet/nulnet/release-nulnet.yml?label=Release)](https://github.com/nulnet/nulnet/actions/workflows/release-nulnet.yml)
-[![Latest Release](https://img.shields.io/github/v/release/nulnet/nulnet)](https://github.com/nulnet/nulnet/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/nulnet/nulnet/ci.yml?branch=main&label=CI)](https://github.com/Da4ndo/nulnet/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/nulnet/nulnet/release-nulnet.yml?label=Release)](https://github.com/Da4ndo/nulnet/actions/workflows/release-nulnet.yml)
+[![Latest Release](https://img.shields.io/github/v/release/nulnet/nulnet)](https://github.com/Da4ndo/nulnet/releases/latest)
 [![License](https://img.shields.io/github/license/nulnet/nulnet)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.98+-orange.svg?logo=rust)](https://www.rust-lang.org)
 
@@ -11,7 +11,7 @@ Lightweight Linux host agent. Collects periodic telemetry, exposes an authentica
 Built with Rust + Tokio.
 
 > [!NOTE]  
-> This repository ships the **agent** only. Clients connect over the Unix socket — use the companion CLI [nulctl](https://github.com/nulnet/nulctl) to authenticate and query telemetry.
+> This repository ships the **agent** only. Clients connect over the Unix socket — use the companion CLI [nulctl](https://github.com/Da4ndo/nulctl) to authenticate and query telemetry.
 
 ---
 
@@ -21,7 +21,7 @@ Built with Rust + Tokio.
 > On **Debian / Ubuntu with systemd**, install from the latest release in one command:
 
 ```bash
-curl -fsSL https://github.com/nulnet/nulnet/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/Da4ndo/nulnet/releases/latest/download/install.sh | bash
 ```
 
 The script downloads and verifies the release binary, creates the `nulnet` system user, installs to `/opt/nulnet`, writes config if missing, optionally installs a sudoers snippet for post-update restarts, and enables the service.
@@ -32,7 +32,7 @@ Custom CDN mirror at install time:
 
 ```bash
 NULNET_CDN_BASE='https://cdn.example.com/nulnet' \
-  curl -fsSL https://github.com/nulnet/nulnet/releases/latest/download/install.sh | bash
+  curl -fsSL https://github.com/Da4ndo/nulnet/releases/latest/download/install.sh | bash
 ```
 
 > [!IMPORTANT]
@@ -46,7 +46,7 @@ NULNET_CDN_BASE='https://cdn.example.com/nulnet' \
 Requires Rust 1.80+ (edition 2024).
 
 ```bash
-git clone https://github.com/nulnet/nulnet.git
+git clone https://github.com/Da4ndo/nulnet.git
 cd nulnet
 cargo build --release
 # binary: target/release/nulnet
@@ -203,9 +203,9 @@ Point `[update].cdn` or `NULNET_CDN_BASE` at a directory that serves these files
 Example base URL: `https://cdn.example.com/nulnet`
 
 ```
-https://cdn.example.com/nulnet/nulnet
-https://cdn.example.com/nulnet/nulnet.sha256
-https://cdn.example.com/nulnet/nulnet.service
+https://cdn.example.com/Da4ndo/nulnet
+https://cdn.example.com/Da4ndo/nulnet.sha256
+https://cdn.example.com/Da4ndo/nulnet.service
 https://cdn.example.com/nulnet/version.txt
 ```
 
@@ -215,7 +215,7 @@ GitHub Releases ship the same artifacts (plus `install.sh`) under `releases/late
 
 ## Contributing
 
-Issues and pull requests are welcome on [github.com/nulnet/nulnet](https://github.com/nulnet/nulnet).
+Issues and pull requests are welcome on [github.com/Da4ndo/nulnet](https://github.com/Da4ndo/nulnet).
 
 1. Fork and clone the repo
 2. Create a branch for your change

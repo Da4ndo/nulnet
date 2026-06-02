@@ -8,7 +8,7 @@ body:
     attributes:
       value: |
         Thanks for reporting a bug. Client-side issues with **nulctl** belong in
-        [nulnet/nulctl](https://github.com/nulnet/nulctl/issues/new/choose).
+        [nulnet/nulctl](https://github.com/Da4ndo/nulctl/issues/new/choose).
 
   - type: input
     id: version

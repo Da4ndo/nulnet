@@ -8,7 +8,7 @@ body:
     attributes:
       value: |
         Describe the problem you are trying to solve and how nulnet could help.
-        Requests for **nulctl** belong in [nulnet/nulctl](https://github.com/nulnet/nulctl/issues/new/choose).
+        Requests for **nulctl** belong in [nulnet/nulctl](https://github.com/Da4ndo/nulctl/issues/new/choose).
 
   - type: textarea
     id: problem

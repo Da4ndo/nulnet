@@ -2,7 +2,7 @@
 # nulnet agent — standalone install (extracted from NOVA nova/setup.sh CDN path).
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/nulnet/nulnet/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Da4ndo/nulnet/main/install.sh | bash
 #   bash install.sh              # interactive
 #   bash install.sh -y           # skip all confirmations (CI / automation)
 #   bash install.sh --dry-run    # full checks + sudo auth; skip mutating commands
