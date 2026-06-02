@@ -54,8 +54,6 @@ cargo build --release
 > [!NOTE]
 > Debug builds load `./config.development.toml`; release builds expect `/opt/nulnet/config.toml`.
 
-Release tags (`v*`) are built by [.github/workflows/release-nulnet.yml](.github/workflows/release-nulnet.yml) and published to GitHub Releases.
-
 ---
 
 ## Configuration
