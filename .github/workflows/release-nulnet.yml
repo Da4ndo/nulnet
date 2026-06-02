@@ -52,6 +52,7 @@ jobs:
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
             --clobber \
+            -R "${{ github.repository }}" \
             nulnet \
             nulnet.sha256 \
             nulnet.service \
