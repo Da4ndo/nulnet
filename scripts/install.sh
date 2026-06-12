@@ -308,7 +308,7 @@ show_intro() {
 ${C_DIM}Telemetry host agent: Unix-socket API, Ed25519 auth, self-update from GitHub or CDN.${C_RESET}
 
   ${C_BOLD}Source:${C_RESET}  $(source_label)
-  ${C_BOLD}Arch:${C_RESET}   $(detect_arch) → $(artifact_name_for_arch "$(detect_arch")")
+  ${C_BOLD}Arch:${C_RESET}   $(detect_arch) → $(artifact_name_for_arch "$(detect_arch)")
   ${C_BOLD}URL:${C_RESET}    $(download_base)
 
 ${C_BOLD}What this installer will do${C_RESET}
