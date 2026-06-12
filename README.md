@@ -37,6 +37,7 @@ NULNET_CDN_BASE='https://cdn.example.com/nulnet' \
 
 > [!IMPORTANT]
 > **Requires:** `curl`, `sha256sum`, `useradd` or `adduser`, `install`, `systemctl`.
+> **Architectures:** `x86_64` and `aarch64` (ARM64). The installer picks the matching release artifact automatically.
 > Release binaries are statically linked (musl) and run on common glibc-based Linux distros (Debian 11+, Ubuntu 20.04+, etc.) without a minimum glibc version.
 
 ---
@@ -192,12 +193,14 @@ Response shape:
 Point `[update].cdn` or `NULNET_CDN_BASE` at a directory that serves these files over HTTPS:
 
 
-| File             | Used by               | Purpose                        |
-| ---------------- | --------------------- | ------------------------------ |
-| `nulnet`         | install + self-update | Agent binary                   |
-| `nulnet.sha256`  | install + self-update | SHA-256 hex digest of `nulnet` |
-| `nulnet.service` | install only          | systemd unit                   |
-| `version.txt`    | self-update only      | Latest semver (e.g. `1.3.2`)   |
+| File                    | Used by               | Purpose                              |
+| ----------------------- | --------------------- | ------------------------------------ |
+| `nulnet`                | install + self-update | Agent binary (`x86_64`)              |
+| `nulnet.sha256`         | install + self-update | SHA-256 hex digest of `nulnet`       |
+| `nulnet-aarch64`        | install + self-update | Agent binary (`aarch64` / ARM64)     |
+| `nulnet-aarch64.sha256` | install + self-update | SHA-256 hex digest of `nulnet-aarch64` |
+| `nulnet.service`        | install only          | systemd unit                         |
+| `version.txt`           | self-update only      | Latest semver (e.g. `1.3.2`)         |
 
 
 Example base URL: `https://cdn.example.com/nulnet`

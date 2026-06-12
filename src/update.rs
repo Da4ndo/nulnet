@@ -40,22 +40,24 @@ struct UpdateUrls {
 	source_label: &'static str,
 }
 
-fn urls_for_config(config: &UpdateConfig) -> UpdateUrls {
+fn urls_for_config(config: &UpdateConfig) -> Result<UpdateUrls, String> {
 	if config.uses_cdn() {
-		UpdateUrls {
+		Ok(UpdateUrls {
 			version_check_url: config.cdn_version_url(),
-			binary_url: config.cdn_binary_url(),
-			checksum_url: config.cdn_checksum_url(),
+			binary_url: config.cdn_binary_url()?,
+			checksum_url: config.cdn_checksum_url()?,
 			source_label: "CDN",
-		}
+		})
 	} else {
 		let base = UpdateConfig::github_download_base();
-		UpdateUrls {
+		let artifact = crate::release::binary_artifact_name()?;
+		let checksum = crate::release::checksum_artifact_name()?;
+		Ok(UpdateUrls {
 			version_check_url: UpdateConfig::github_latest_api_url(),
-			binary_url: format!("{}/nulnet", base),
-			checksum_url: format!("{}/nulnet.sha256", base),
+			binary_url: format!("{}/{}", base, artifact),
+			checksum_url: format!("{}/{}", base, checksum),
 			source_label: "GitHub",
-		}
+		})
 	}
 }
 
@@ -89,7 +91,7 @@ pub async fn run_update_stream(
 	config: &UpdateConfig,
 ) -> Result<UpdateOutcome, String> {
 	let current = env!("CARGO_PKG_VERSION");
-	let urls = urls_for_config(config);
+	let urls = urls_for_config(config)?;
 
 	line(&tx, dim("Checking for updates...")).await;
 	let latest = match fetch_latest_version(config, &urls).await {

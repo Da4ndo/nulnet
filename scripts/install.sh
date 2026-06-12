@@ -98,6 +98,58 @@ banner() {
 
 is_root() { [[ "$(id -u)" -eq 0 ]]; }
 
+detect_arch() {
+	local raw
+	raw="$(uname -m)"
+	case "$raw" in
+		x86_64|amd64) printf 'x86_64' ;;
+		aarch64|arm64) printf 'aarch64' ;;
+		*)
+			err "Unsupported architecture: ${raw} (need x86_64 or aarch64)"
+			exit 1
+			;;
+	esac
+}
+
+artifact_name_for_arch() {
+	case "$1" in
+		x86_64) printf 'nulnet' ;;
+		aarch64) printf 'nulnet-aarch64' ;;
+		*)
+			err "Internal error: unknown arch $1"
+			exit 1
+			;;
+	esac
+}
+
+verify_binary_arch() {
+	local bin="$1"
+	local arch="$2"
+	if ! command -v file &>/dev/null; then
+		warn "file(1) not found — skipping executable format check"
+		return 0
+	fi
+	local desc
+	desc="$(file -b "$bin")"
+	case "$arch" in
+		x86_64)
+			if [[ "$desc" != *x86-64* ]]; then
+				err "Downloaded binary is not x86-64: ${desc}"
+				err "Build from source on this host, or wait for a matching release artifact."
+				exit 1
+			fi
+			;;
+		aarch64)
+			if [[ "$desc" != *aarch64* ]]; then
+				err "Downloaded binary is not ARM64: ${desc}"
+				err "Build from source on this host, or wait for a matching release artifact."
+				exit 1
+			fi
+			;;
+	esac
+	ok "Binary matches host architecture (${arch})"
+}
+
 has_useradd() { command -v useradd &>/dev/null; }
 has_adduser() { command -v adduser &>/dev/null; }
 
@@ -256,6 +308,7 @@ show_intro() {
 ${C_DIM}Telemetry host agent: Unix-socket API, Ed25519 auth, self-update from GitHub or CDN.${C_RESET}
 
   ${C_BOLD}Source:${C_RESET}  $(source_label)
+  ${C_BOLD}Arch:${C_RESET}   $(detect_arch) → $(artifact_name_for_arch "$(detect_arch")")
   ${C_BOLD}URL:${C_RESET}    $(download_base)
 
 ${C_BOLD}What this installer will do${C_RESET}
@@ -372,8 +425,10 @@ check_commands() {
 phase_download() {
 	hdr "Phase 1 — download and verify"
 
-	local base
+	local base arch artifact
 	base="$(download_base)"
+	arch="$(detect_arch)"
+	artifact="$(artifact_name_for_arch "$arch")"
 	local label
 	label="$(source_label)"
 
@@ -382,15 +437,17 @@ phase_download() {
 	cleanup() { rm -f "${TMP_BIN:-}" "${TMP_SVC:-}"; }
 	trap cleanup EXIT
 
-	info "Downloading agent binary from ${label}…"
-	if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$TMP_BIN" "${base}/nulnet"; then
-		err "Failed to download nulnet binary from ${label}"
+	info "Downloading ${artifact} (${arch}) from ${label}…"
+	if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$TMP_BIN" "${base}/${artifact}"; then
+		err "Failed to download ${artifact} from ${label}"
+		err "If this is a new architecture, build from source until a release is published."
 		exit 1
 	fi
 	ok "Downloaded $(wc -c <"$TMP_BIN" | tr -d ' ') bytes"
+	verify_binary_arch "$TMP_BIN" "$arch"
 
 	EXPECTED_HASH="$(curl -fsSL --connect-timeout 10 --max-time 30 \
-		"${base}/nulnet.sha256" 2>/dev/null || true)"
+		"${base}/${artifact}.sha256" 2>/dev/null || true)"
 	EXPECTED_HASH="${EXPECTED_HASH//[$'\t\r\n ']}"
 
 	if [[ -n "$EXPECTED_HASH" ]] && [[ "${#EXPECTED_HASH}" -eq 64 ]]; then

@@ -2,7 +2,9 @@ use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 
-const DEFAULT_GITHUB_REPO: &str = "nulnet/nulnet";
+use crate::release;
+
+const DEFAULT_GITHUB_REPO: &str = release::GITHUB_REPO;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
@@ -45,16 +47,18 @@ impl UpdateConfig {
 		)
 	}
 
-	pub fn cdn_binary_url(&self) -> String {
-		format!("{}/nulnet", self.cdn_base().trim_end_matches('/'))
+	pub fn cdn_binary_url(&self) -> Result<String, String> {
+		let name = release::binary_artifact_name()?;
+		Ok(format!("{}/{}", self.cdn_base().trim_end_matches('/'), name))
 	}
 
 	pub fn cdn_version_url(&self) -> String {
 		format!("{}/version.txt", self.cdn_base().trim_end_matches('/'))
 	}
 
-	pub fn cdn_checksum_url(&self) -> String {
-		format!("{}/nulnet.sha256", self.cdn_base().trim_end_matches('/'))
+	pub fn cdn_checksum_url(&self) -> Result<String, String> {
+		let name = release::checksum_artifact_name()?;
+		Ok(format!("{}/{}", self.cdn_base().trim_end_matches('/'), name))
 	}
 }
 

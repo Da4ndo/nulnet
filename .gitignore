@@ -3,6 +3,7 @@
 /data
 /.cargo
 /scripts/build.mac.sh
+/scripts/install.mac.sh
 
 *.sock
 config.development.toml

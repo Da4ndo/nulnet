@@ -1,4 +1,5 @@
 mod config;
+mod release;
 mod storage;
 mod telemetry;
 mod transport;
