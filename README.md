@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="./preview.png" alt="NULNET preview" width="600"/>
+</p>
+
+
 # **NULNET** — **N**ode **U**tility & **L**ifecycle **N**etwork **E**nvironment **T**ool
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Da4ndo/nulnet/ci.yml?branch=main&label=CI)](https://github.com/Da4ndo/nulnet/actions/workflows/ci.yml)
