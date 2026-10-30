@@ -24,10 +24,6 @@ impl Ema {
 		self.0 = Some(self.0.map_or(x, |v| v + alpha * (x - v)));
 	}
 
-	fn deviates(&self, x: f64, by: f64) -> bool {
-		self.0.is_some_and(|v| (x - v).abs() >= by)
-	}
-
 	fn spikes(&self, x: f64, mult: f64, min: f64) -> bool {
 		x >= min && self.0.is_some_and(|v| x >= v * mult)
 	}
@@ -70,17 +66,14 @@ impl Condition {
 
 pub struct Decision {
 	pub persist: bool,
-	pub burst: bool,
 	pub events: Vec<Event>,
 }
 
 pub struct Pacer {
 	base: Duration,
 	tick: Duration,
-	burst_len: Duration,
 	alpha: f64,
 	last_persist: Option<Instant>,
-	burst_until: Option<Instant>,
 	cpu_ema: Ema,
 	mem_ema: Ema,
 	gpu_ema: Ema,
@@ -96,14 +89,12 @@ pub struct Pacer {
 }
 
 impl Pacer {
-	pub fn new(base: Duration, tick: Duration, burst_len: Duration) -> Self {
+	pub fn new(base: Duration, tick: Duration) -> Self {
 		Self {
 			base,
 			tick,
-			burst_len,
 			alpha: 1.0 - (-tick.as_secs_f64() / EMA_WINDOW_SECS).exp(),
 			last_persist: None,
-			burst_until: None,
 			cpu_ema: Ema::default(),
 			mem_ema: Ema::default(),
 			gpu_ema: Ema::default(),
@@ -120,33 +111,16 @@ impl Pacer {
 	}
 
 	pub fn observe(&mut self, p: &Probe, now: Instant) -> Decision {
-		let net = p.network.rx_bytes_per_sec + p.network.tx_bytes_per_sec;
-		// Bursts follow sudden changes only: a steady high level settles into the
-		// baseline and keeps the base interval.
-		let jump = self.cpu_ema.deviates(p.cpu, CPU_JUMP)
-			|| self.mem_ema.deviates(p.memory, MEM_JUMP)
-			|| p.gpu.is_some_and(|g| self.gpu_ema.deviates(g, GPU_JUMP))
-			|| self.net_ema.spikes(net, NET_SPIKE_MULT, NET_SPIKE_MIN)
-			|| self.conn_ema.spikes(
-				p.network.new_connections_per_sec,
-				NET_SPIKE_MULT,
-				CONN_SURGE_MIN,
-			);
-
 		let events = self.detect(p);
 		self.update_baselines(p);
 
-		if jump {
-			self.burst_until = Some(now + self.burst_len);
-		}
-		let burst = self.burst_until.is_some_and(|until| now < until);
 		let persist = self
 			.last_persist
 			.is_none_or(|last| now.duration_since(last) >= self.base.saturating_sub(self.tick / 2));
 		if persist {
 			self.last_persist = Some(now);
 		}
-		Decision { persist, burst, events }
+		Decision { persist, events }
 	}
 
 	fn detect(&mut self, p: &Probe) -> Vec<Event> {

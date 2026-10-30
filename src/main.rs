@@ -61,16 +61,11 @@ async fn telemetry_loop(
 		30
 	});
 	let tick = Duration::from_secs(telemetry.sample_interval_seconds.max(1)).min(base);
-	let mut pacer = Pacer::new(
-		base,
-		tick,
-		Duration::from_secs(telemetry.burst_duration_seconds),
-	);
+	let mut pacer = Pacer::new(base, tick);
 	let mut ticker = interval(tick);
 	ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
 	// Collected per probe, attached to the snapshot that closes the window.
 	let mut events = Vec::new();
-	let mut burst = false;
 	// Disk, containers and system info are pushed to live clients only when they change.
 	let mut last_details = String::new();
 
@@ -82,12 +77,10 @@ async fn telemetry_loop(
 			serde_json::json!({
 				"type": "reading",
 				"reading": collector.last_sample(),
-				"burst": decision.burst,
 				"events": decision.events,
 			})
 		});
 		events.extend(decision.events);
-		burst |= decision.burst;
 		if !decision.persist {
 			continue;
 		}
@@ -95,7 +88,6 @@ async fn telemetry_loop(
 		for event in &events {
 			tracing::info!("Telemetry event: {:?} {:?} ({:.2})", event.kind, event.phase, event.value);
 		}
-		snapshot.burst = std::mem::take(&mut burst);
 		snapshot.events = std::mem::take(&mut events);
 		snapshot.set_cached_telemetry_disk(
 			telemetry_store.snapshots_disk_bytes().await,

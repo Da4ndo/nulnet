@@ -10,7 +10,7 @@ hex = "0.4.3"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
-sysinfo = "0.39.6"
+sysinfo = "0.39.6" # NEW GPU API 0.40.0
 tokio = { version = "1.54.1", features = ["rt", "rt-multi-thread", "macros", "fs", "time", "net", "io-util", "process", "sync", "signal"] }
 toml = "1.1.8"
 tracing = "0.1.44"

@@ -25,8 +25,6 @@ pub struct TelemetrySnapshot {
 	pub cached_telemetry_size: String,
 	#[serde(default)]
 	pub network: NetworkStats,
-	#[serde(default)]
-	pub burst: bool,
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub events: Vec<Event>,
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -341,7 +339,6 @@ impl TelemetryCollector {
 			},
 			cached_telemetry_size: format_dynamic_size(0),
 			network,
-			burst: false,
 			events: vec![],
 			samples,
 		}

@@ -668,7 +668,6 @@ mod tests {
 			},
 			cached_telemetry_size: "0 B".to_string(),
 			network: Default::default(),
-			burst: false,
 			events: vec![],
 			samples: vec![],
 		}
