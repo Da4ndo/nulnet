@@ -11,6 +11,8 @@ allowed_keys = [""]
 
 [telemetry]
 interval_seconds = 30
+sample_interval_seconds = 1
+burst_duration_seconds = 120
 
 # Optional: custom CDN for self-update. Omit to use GitHub Releases (nulnet/nulnet).
 # [update]

@@ -98,7 +98,9 @@ interval_seconds = 30
 | `agent.retention_days`       | `5`                       | Snapshots older than this are pruned hourly   |
 | `agent.socket_path`          | `/opt/nulnet/nulnet.sock` | Unix socket for the API                       |
 | `agent.allowed_keys`         | `[]`                      | Ed25519 public keys allowed to authenticate   |
-| `telemetry.interval_seconds` | `30`                      | Collection interval                           |
+| `telemetry.interval_seconds` | `30`                      | Base collection interval                      |
+| `telemetry.sample_interval_seconds` | `1`          | Probe interval; every reading is kept         |
+| `telemetry.burst_duration_seconds` | `120`         | How long windows stay marked burst after a jump |
 | `update.cdn`                 | *(unset)*                 | Custom CDN base URL; omit for GitHub Releases |
 
 
@@ -117,9 +119,11 @@ interval_seconds = 30
 
 ## Telemetry
 
-Every `interval_seconds`, the agent writes a JSON snapshot to `data_dir` as `<unix_timestamp>.json`. Old files are removed on an hourly schedule per `retention_days`.
+The agent probes CPU, memory and network every `sample_interval_seconds` (TCP tables and GPU at most every 5s) and, every `interval_seconds`, writes one compact JSON snapshot to `data_dir` as `<unix_timestamp>.json`. Each snapshot's `samples` array holds every probe reading of its window. A sudden jump in CPU, RAM, GPU, network traffic or new connections (not a steady high level) marks the window `burst` for `burst_duration_seconds`; nulctl marks those points on its charts. Old files are removed on an hourly schedule per `retention_days`.
 
-Collected fields: OS name, CPU usage and topology, GPU usage and VRAM (NVIDIA via `nvidia-smi`, AMD via `rocm-smi`), memory, disks, load average, uptime, running Docker containers (when `docker` is available), and on-disk cache size.
+Collected fields: OS name, CPU usage and topology, GPU usage and VRAM (NVIDIA via `nvidia-smi`, AMD via `rocm-smi`), memory, disks, load average, uptime, running Docker containers (when `docker` is available), network throughput and packet rates on physical interfaces, inbound TCP connections, accepted connections per second, SYN_RECV count, and on-disk cache size.
+
+Load events are recorded in a snapshot's `events` array with a `start` or `end` phase. `cpu_spike`, `mem_spike` and `gpu_spike` fire on a sudden jump above the moving average; `net_spike`, `conn_surge` and `possible_ddos` track traffic and connection floods.
 
 Example snapshot:
 
@@ -153,9 +157,28 @@ Example snapshot:
   "containers": [],
   "uptime_seconds": 864312,
   "load_average": { "one": 1.23, "five": 0.98, "fifteen": 0.74 },
-  "cached_telemetry_size": "8.45 MB"
+  "cached_telemetry_size": "8.45 MB",
+  "network": {
+    "rx_bytes_per_sec": 182340.5,
+    "tx_bytes_per_sec": 96120.25,
+    "rx_packets_per_sec": 412.3,
+    "tx_packets_per_sec": 298.7,
+    "inbound_connections": 37,
+    "new_connections_per_sec": 2.4,
+    "syn_recv": 0
+  },
+  "burst": true,
+  "events": [
+    { "kind": "cpu_spike", "phase": "start", "value": 78.4, "timestamp": 1747561221 }
+  ],
+  "samples": [
+    { "t": 1747561220, "cpu": 15.1, "mem": 62.3, "gpu": 44.0, "rx": 170210.0, "tx": 90544.0, "conns": 36, "new_conns": 2.0, "syn": 0, "load": 1.18 },
+    { "t": 1747561221, "cpu": 78.4, "mem": 62.4, "gpu": 45.0, "rx": 191002.0, "tx": 99870.0, "conns": 37, "new_conns": 3.0, "syn": 0, "load": 1.23 }
+  ]
 }
 ```
+
+`samples` is trimmed here; a 30s window holds about 30 readings. `events` and `samples` are omitted when empty, and `gpu` is omitted from a sample on hosts without a GPU.
 
 ---
 
@@ -174,6 +197,7 @@ One JSON object per line in, one per line out. Ed25519 challenge–response auth
 | `telemetry.get_range`  | Yes  | Snapshots between `since` / `until` (Unix s); optional `limit` |
 | `telemetry.get_bulk`   | Yes  | Snapshots for the last `hours` (default 1); optional `limit`   |
 | `agent.update`         | Yes  | Streamed self-update from GitHub or CDN                        |
+| `telemetry.subscribe`  | Yes  | Turns the connection into a live push stream: a `reading` every second, `details` on change |
 
 
 Request shape:
@@ -190,6 +214,18 @@ Response shape:
 
 > [!NOTE]
 > `agent.update` emits multiple `"status": "streaming"` lines before the final result.
+>
+> `telemetry.subscribe` acknowledges with `{"type":"subscribed"}`, then pushes `"status": "streaming"` lines until the client disconnects: a `reading` every probe and `details` whenever disk or containers change. Use a dedicated connection for it; fetch history once with `telemetry.get_range` / `get_bulk`.
+
+Live stream lines:
+
+```json
+{ "id": "1", "status": "streaming", "data": { "type": "subscribed" } }
+{ "id": "live", "status": "streaming", "data": { "type": "reading", "reading": { "t": 1747561221, "cpu": 78.4, "mem": 62.4, "gpu": 45.0, "rx": 191002.0, "tx": 99870.0, "conns": 37, "new_conns": 3.0, "syn": 0, "load": 1.23 }, "burst": true, "events": [{ "kind": "cpu_spike", "phase": "start", "value": 78.4, "timestamp": 1747561221 }] } }
+{ "id": "live", "status": "streaming", "data": { "type": "details", "details": { "os": "Debian GNU/Linux 13 (trixie)", "cpu": { … }, "gpu": [ … ], "disk": [ … ], "containers": [], "uptime_seconds": 864312, "cached_telemetry_size": "8.45 MB" } } }
+```
+
+`details.cpu`, `gpu` and `disk` have the same shape as in a snapshot.
 
 ---
 
