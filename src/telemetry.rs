@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
-use sysinfo::{CpuRefreshKind, Disks, System};
+use sysinfo::{CpuRefreshKind, Disks, Networks, System};
+use std::collections::HashSet;
 use std::process::Stdio;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tokio::process::Command;
 use tokio::time::{timeout, Duration};
 
@@ -22,6 +23,29 @@ pub struct TelemetrySnapshot {
 	/// Human-readable on-disk size of persisted telemetry JSON cache.
 	#[serde(default = "default_cached_telemetry_size")]
 	pub cached_telemetry_size: String,
+	#[serde(default)]
+	pub network: NetworkStats,
+	#[serde(default)]
+	pub burst: bool,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub events: Vec<Event>,
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub samples: Vec<Sample>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Sample {
+	pub t: u64,
+	pub cpu: f64,
+	pub mem: f64,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub gpu: Option<f64>,
+	pub rx: f64,
+	pub tx: f64,
+	pub conns: u32,
+	pub new_conns: f64,
+	pub syn: u32,
+	pub load: f64,
 }
 
 fn default_cached_telemetry_size() -> String {
@@ -58,7 +82,7 @@ pub struct CpuInfo {
 	pub display: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GpuInfo {
 	pub name: String,
 	/// GPU core usage 0–100.
@@ -95,6 +119,52 @@ pub struct LoadAverage {
 	pub fifteen: f64,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct NetworkStats {
+	pub rx_bytes_per_sec: f64,
+	pub tx_bytes_per_sec: f64,
+	pub rx_packets_per_sec: f64,
+	pub tx_packets_per_sec: f64,
+	pub inbound_connections: u32,
+	pub new_connections_per_sec: f64,
+	pub syn_recv: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EventKind {
+	CpuSpike,
+	MemSpike,
+	GpuSpike,
+	NetSpike,
+	ConnSurge,
+	PossibleDdos,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+	Start,
+	End,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Event {
+	pub kind: EventKind,
+	pub phase: Phase,
+	pub value: f64,
+	pub timestamp: u64,
+}
+
+#[derive(Debug)]
+pub struct Probe {
+	pub timestamp: u64,
+	pub cpu: f64,
+	pub memory: f64,
+	pub network: NetworkStats,
+	pub gpu: Option<f64>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DockerContainer {
 	pub name: String,
@@ -109,10 +179,34 @@ pub struct DockerContainer {
 pub struct TelemetryCollector {
 	sys: System,
 	disks: Disks,
-	/// Collected once at startup — CPU topology and model don't change.
+	networks: Networks,
 	cpu_info: Option<CpuInfo>,
-	/// Collected once at startup — OS name doesn't change.
+
 	os_info: Option<String>,
+	last_probe: Option<NetSample>,
+	last_persist: Option<NetSample>,
+	has_gpu: bool,
+	samples: Vec<Sample>,
+	last_slow: Option<Instant>,
+	tcp_states: (u32, u32),
+	gpu: Vec<GpuInfo>,
+}
+
+const SLOW_PROBE: Duration = Duration::from_secs(5);
+
+#[derive(Debug, Clone, Copy, Default)]
+struct NetCounters {
+	rx_bytes: u64,
+	tx_bytes: u64,
+	rx_packets: u64,
+	tx_packets: u64,
+	passive_opens: u64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NetSample {
+	at: Instant,
+	counters: NetCounters,
 }
 
 impl Default for TelemetryCollector {
@@ -132,27 +226,104 @@ impl TelemetryCollector {
 		let cpu_info = build_cpu_info(&sys);
 		let os_info = collect_os_info();
 		let disks = Disks::new_with_refreshed_list();
+		let networks = Networks::new_with_refreshed_list();
 
-		Self { sys, disks, cpu_info, os_info }
+		Self {
+			sys,
+			disks,
+			networks,
+			cpu_info,
+			os_info,
+			last_probe: None,
+			last_persist: None,
+			has_gpu: false,
+			samples: vec![],
+			last_slow: None,
+			tcp_states: (0, 0),
+			gpu: vec![],
+		}
 	}
 
-	pub async fn collect(&mut self) -> TelemetrySnapshot {
+	/// Refreshes CPU, memory, network counters and (when present) GPU usage.
+	pub async fn probe(&mut self) -> Probe {
 		self.sys.refresh_cpu_usage();
 		self.sys.refresh_memory();
+		self.networks.refresh(true);
+
+		let now = Instant::now();
+		let sample = NetSample {
+			at: now,
+			counters: read_net_counters(&self.networks),
+		};
+		if self.last_slow.is_none_or(|t| now.duration_since(t) >= SLOW_PROBE) {
+			self.last_slow = Some(now);
+			self.tcp_states = read_tcp_states();
+			if self.has_gpu {
+				self.gpu = collect_gpu_info().await;
+			}
+		}
+		let (inbound, syn_recv) = self.tcp_states;
+		let network = net_rates(self.last_probe.as_ref(), &sample, inbound, syn_recv);
+		self.last_probe = Some(sample);
+
+		let probe = Probe {
+			timestamp: unix_now(),
+			cpu: round2(self.sys.global_cpu_usage() as f64),
+			memory: build_memory_stats(&self.sys).usage,
+			network,
+			gpu: self.gpu.iter().map(|g| g.usage).reduce(f64::max),
+		};
+		self.samples.push(Sample {
+			t: probe.timestamp,
+			cpu: probe.cpu,
+			mem: probe.memory,
+			gpu: probe.gpu,
+			rx: probe.network.rx_bytes_per_sec,
+			tx: probe.network.tx_bytes_per_sec,
+			conns: probe.network.inbound_connections,
+			new_conns: probe.network.new_connections_per_sec,
+			syn: probe.network.syn_recv,
+			load: round2(System::load_average().one),
+		});
+		probe
+	}
+
+	pub fn last_sample(&self) -> Option<&Sample> {
+		self.samples.last()
+	}
+
+	/// Full snapshot built on top of the latest `probe()` reading.
+	pub async fn collect(&mut self, probe: Probe) -> TelemetrySnapshot {
 		self.disks.refresh(true);
 
-		let cpu_usage = round2(self.sys.global_cpu_usage() as f64);
+		let cpu_usage = probe.cpu;
 		let memory = build_memory_stats(&self.sys);
+		let network = match self.last_probe {
+			Some(current) => {
+				let stats = net_rates(
+					self.last_persist.as_ref(),
+					&current,
+					probe.network.inbound_connections,
+					probe.network.syn_recv,
+				);
+				self.last_persist = Some(current);
+				stats
+			}
+			None => probe.network,
+		};
 		let disk_stats = build_disk_stats(&self.disks);
 		let load_avg = System::load_average();
-		let gpu = collect_gpu_info().await;
+		let gpu = if self.has_gpu {
+			self.gpu.clone()
+		} else {
+			collect_gpu_info().await
+		};
+		self.has_gpu = !gpu.is_empty();
+		let samples = std::mem::take(&mut self.samples);
 		let containers = collect_docker_containers().await;
 
 		TelemetrySnapshot {
-			timestamp: SystemTime::now()
-				.duration_since(UNIX_EPOCH)
-				.unwrap_or_default()
-				.as_secs(),
+			timestamp: probe.timestamp,
 			os: self.os_info.clone(),
 			cpu: Cpu {
 				usage: cpu_usage,
@@ -169,8 +340,125 @@ impl TelemetryCollector {
 				fifteen: load_avg.fifteen,
 			},
 			cached_telemetry_size: format_dynamic_size(0),
+			network,
+			burst: false,
+			events: vec![],
+			samples,
 		}
 	}
+}
+
+fn unix_now() -> u64 {
+	SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.unwrap_or_default()
+		.as_secs()
+}
+
+// ─── Network helpers ─────────────────────────────────────────────────────────
+
+/// Loopback, container and bridge interfaces duplicate traffic seen on the physical NIC.
+fn is_virtual_iface(name: &str) -> bool {
+	const PREFIXES: [&str; 8] = ["lo", "veth", "docker", "br-", "virbr", "cni", "flannel", "cali"];
+	PREFIXES.iter().any(|p| name.starts_with(p))
+}
+
+fn read_net_counters(networks: &Networks) -> NetCounters {
+	let mut c = networks
+		.iter()
+		.filter(|(name, _)| !is_virtual_iface(name))
+		.fold(NetCounters::default(), |mut c, (_, data)| {
+			c.rx_bytes += data.total_received();
+			c.tx_bytes += data.total_transmitted();
+			c.rx_packets += data.total_packets_received();
+			c.tx_packets += data.total_packets_transmitted();
+			c
+		});
+	c.passive_opens = std::fs::read_to_string("/proc/net/snmp")
+		.ok()
+		.and_then(|s| parse_passive_opens(&s))
+		.unwrap_or(0);
+	c
+}
+
+fn net_rates(
+	prev: Option<&NetSample>,
+	cur: &NetSample,
+	inbound_connections: u32,
+	syn_recv: u32,
+) -> NetworkStats {
+	let mut stats = NetworkStats {
+		inbound_connections,
+		syn_recv,
+		..NetworkStats::default()
+	};
+	let Some(prev) = prev else {
+		return stats;
+	};
+	let secs = cur.at.duration_since(prev.at).as_secs_f64();
+	if secs <= 0.0 {
+		return stats;
+	}
+	let rate = |now: u64, before: u64| round2(now.saturating_sub(before) as f64 / secs);
+	let (a, b) = (&prev.counters, &cur.counters);
+	stats.rx_bytes_per_sec = rate(b.rx_bytes, a.rx_bytes);
+	stats.tx_bytes_per_sec = rate(b.tx_bytes, a.tx_bytes);
+	stats.rx_packets_per_sec = rate(b.rx_packets, a.rx_packets);
+	stats.tx_packets_per_sec = rate(b.tx_packets, a.tx_packets);
+	stats.new_connections_per_sec = rate(b.passive_opens, a.passive_opens);
+	stats
+}
+
+/// `/proc/net/snmp` has a `Tcp:` header line followed by a `Tcp:` value line.
+fn parse_passive_opens(content: &str) -> Option<u64> {
+	let mut tcp = content.lines().filter(|l| l.starts_with("Tcp:"));
+	let header = tcp.next()?;
+	let values = tcp.next()?;
+	let idx = header.split_whitespace().position(|h| h == "PassiveOpens")?;
+	values.split_whitespace().nth(idx)?.parse().ok()
+}
+
+/// Returns `(inbound established, SYN_RECV)` across IPv4 and IPv6; zeros off Linux.
+fn read_tcp_states() -> (u32, u32) {
+	let rows: Vec<(u16, u8)> = ["/proc/net/tcp", "/proc/net/tcp6"]
+		.iter()
+		.filter_map(|p| std::fs::read_to_string(p).ok())
+		.flat_map(|s| parse_tcp_rows(&s))
+		.collect();
+	count_tcp_states(&rows)
+}
+
+const TCP_ESTABLISHED: u8 = 0x01;
+const TCP_SYN_RECV: u8 = 0x03;
+const TCP_LISTEN: u8 = 0x0A;
+
+/// Parses `(local port, state)` from `/proc/net/tcp{,6}` rows, skipping the header.
+fn parse_tcp_rows(content: &str) -> Vec<(u16, u8)> {
+	content
+		.lines()
+		.skip(1)
+		.filter_map(|line| {
+			let mut fields = line.split_whitespace();
+			let local = fields.nth(1)?;
+			let state = fields.nth(1)?;
+			let port = u16::from_str_radix(local.rsplit(':').next()?, 16).ok()?;
+			let state = u8::from_str_radix(state, 16).ok()?;
+			Some((port, state))
+		})
+		.collect()
+}
+
+fn count_tcp_states(rows: &[(u16, u8)]) -> (u32, u32) {
+	let listening: HashSet<u16> = rows
+		.iter()
+		.filter(|(_, s)| *s == TCP_LISTEN)
+		.map(|(p, _)| *p)
+		.collect();
+	rows.iter().fold((0, 0), |(inbound, syn), (port, state)| match *state {
+		TCP_ESTABLISHED if listening.contains(port) => (inbound + 1, syn),
+		TCP_SYN_RECV => (inbound, syn + 1),
+		_ => (inbound, syn),
+	})
 }
 
 // ─── Memory / disk builders ──────────────────────────────────────────────────

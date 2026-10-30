@@ -21,7 +21,7 @@ impl SnapshotStore {
 		let file_name = format!("{}.json", snapshot.timestamp);
 		let path = self.data_dir.join(file_name);
 
-		let json = serde_json::to_string_pretty(snapshot)
+		let json = serde_json::to_string(snapshot)
 			.map_err(|e| format!("Failed to serialize snapshot: {}", e))?;
 
 		fs::write(&path, json).await
@@ -227,6 +227,10 @@ mod tests {
 				fifteen: 0.0,
 			},
 			cached_telemetry_size: "0 B".to_string(),
+			network: Default::default(),
+			burst: false,
+			events: vec![],
+			samples: vec![],
 		}
 	}
 

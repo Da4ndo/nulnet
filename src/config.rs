@@ -92,14 +92,19 @@ impl Default for AgentConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(default)]
 pub struct TelemetryConfig {
 	pub interval_seconds: u64,
+	pub sample_interval_seconds: u64,
+	pub burst_duration_seconds: u64,
 }
 
 impl Default for TelemetryConfig {
 	fn default() -> Self {
 		Self {
 			interval_seconds: 30,
+			sample_interval_seconds: 1,
+			burst_duration_seconds: 120,
 		}
 	}
 }

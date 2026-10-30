@@ -1,4 +1,6 @@
 mod config;
+mod live;
+mod pacer;
 mod release;
 mod storage;
 mod telemetry;
@@ -6,7 +8,9 @@ mod transport;
 mod update;
 
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
+use std::time::Instant;
+use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
+use crate::pacer::Pacer;
 use crate::storage::SnapshotStore;
 use crate::telemetry::TelemetryCollector;
 
@@ -23,10 +27,7 @@ async fn main() {
 
 	let config = Arc::new(config::load_config());
 	let store = Arc::new(SnapshotStore::new(&config.agent.data_dir));
-	tokio::spawn(telemetry_loop(
-		config.telemetry.interval_seconds,
-		store.clone(),
-	));
+	tokio::spawn(telemetry_loop(config.clone(), store.clone()));
 
 	tokio::spawn(rotation_loop(
 		config.agent.retention_days,
@@ -49,26 +50,75 @@ async fn main() {
 }
 
 async fn telemetry_loop(
-	interval_seconds: u64,
+	config: Arc<config::Config>,
 	telemetry_store: Arc<SnapshotStore>,
 ) {
+	let telemetry = &config.telemetry;
 	let mut collector = TelemetryCollector::new();
-	let secs = if interval_seconds > 0 {
-		interval_seconds
+	let base = Duration::from_secs(if telemetry.interval_seconds > 0 {
+		telemetry.interval_seconds
 	} else {
 		30
-	};
-	let interval = Duration::from_secs(secs);
+	});
+	let tick = Duration::from_secs(telemetry.sample_interval_seconds.max(1)).min(base);
+	let mut pacer = Pacer::new(
+		base,
+		tick,
+		Duration::from_secs(telemetry.burst_duration_seconds),
+	);
+	let mut ticker = interval(tick);
+	ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+	// Collected per probe, attached to the snapshot that closes the window.
+	let mut events = Vec::new();
+	let mut burst = false;
+	// Disk, containers and system info are pushed to live clients only when they change.
+	let mut last_details = String::new();
 
 	loop {
-		let mut snapshot = collector.collect().await;
+		ticker.tick().await;
+		let probe = collector.probe().await;
+		let decision = pacer.observe(&probe, Instant::now());
+		live::publish(|| {
+			serde_json::json!({
+				"type": "reading",
+				"reading": collector.last_sample(),
+				"burst": decision.burst,
+				"events": decision.events,
+			})
+		});
+		events.extend(decision.events);
+		burst |= decision.burst;
+		if !decision.persist {
+			continue;
+		}
+		let mut snapshot = collector.collect(probe).await;
+		for event in &events {
+			tracing::info!("Telemetry event: {:?} {:?} ({:.2})", event.kind, event.phase, event.value);
+		}
+		snapshot.burst = std::mem::take(&mut burst);
+		snapshot.events = std::mem::take(&mut events);
 		snapshot.set_cached_telemetry_disk(
 			telemetry_store.snapshots_disk_bytes().await,
 		);
+		let details = serde_json::json!({
+			"os": &snapshot.os,
+			"cpu": &snapshot.cpu.info,
+			"gpu": &snapshot.gpu,
+			"disk": &snapshot.disk,
+			"containers": &snapshot.containers,
+			"uptime_seconds": snapshot.uptime_seconds,
+			"cached_telemetry_size": &snapshot.cached_telemetry_size,
+		});
+		// Uptime and GPU usage always move; key on disk and containers so only real changes push.
+		let key = serde_json::to_string(&[&details["disk"], &details["containers"]])
+			.unwrap_or_default();
+		if key != last_details {
+			live::publish(|| serde_json::json!({ "type": "details", "details": &details }));
+			last_details = key;
+		}
 		if let Err(e) = telemetry_store.save(&snapshot).await {
 			tracing::error!("Failed to save telemetry snapshot: {}", e);
 		}
-		sleep(interval).await;
 	}
 }
 

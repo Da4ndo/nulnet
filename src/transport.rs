@@ -188,9 +188,44 @@ async fn route_request(
 			write_response(writer, &res).await.is_ok()
 		}
 		"agent.update" => handle_update_streaming(request, config, writer).await,
+		"telemetry.subscribe" => handle_subscribe(request, writer).await,
 		_ => {
 			let res = handle_command(request, store, config).await;
 			write_response(writer, &res).await.is_ok()
+		}
+	}
+}
+
+async fn handle_subscribe(
+	request: AgentRequest,
+	writer: &mut tokio::io::WriteHalf<UnixStream>,
+) -> bool {
+	let mut rx = crate::live::subscribe();
+	let ack = AgentResponse {
+		id: request.id,
+		status: "streaming".to_string(),
+		data: Some(serde_json::json!({ "type": "subscribed" })),
+		error: None,
+	};
+	if write_response(writer, &ack).await.is_err() {
+		return false;
+	}
+	loop {
+		let line = match rx.recv().await {
+			Ok(line) => line,
+			Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+				tracing::warn!("Live subscriber lagged, skipped {} messages", skipped);
+				continue;
+			}
+			Err(tokio::sync::broadcast::error::RecvError::Closed) => return false,
+		};
+		let written = async {
+			writer.write_all(line.as_bytes()).await?;
+			writer.write_all(b"\n").await?;
+			writer.flush().await
+		};
+		if written.await.is_err() {
+			return false;
 		}
 	}
 }
@@ -333,6 +368,7 @@ async fn handle_command(
 					"snapshot_count": bounds.count,
 					"retention_days": config.agent.retention_days,
 					"interval_seconds": config.telemetry.interval_seconds,
+					"sample_interval_seconds": config.telemetry.sample_interval_seconds,
 				})),
 				error: None,
 			}
@@ -631,6 +667,10 @@ mod tests {
 				fifteen: 0.0,
 			},
 			cached_telemetry_size: "0 B".to_string(),
+			network: Default::default(),
+			burst: false,
+			events: vec![],
+			samples: vec![],
 		}
 	}
 
@@ -699,7 +739,7 @@ mod tests {
 				socket_path: socket_path.to_string_lossy().to_string(),
 				allowed_keys: vec![pub_hex.clone()],
 			},
-			telemetry: TelemetryConfig { interval_seconds: 30 },
+			telemetry: TelemetryConfig::default(),
 			update: UpdateConfig { cdn: Some(cdn_base) },
 		});
 
